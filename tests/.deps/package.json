@@ -1,0 +1,8 @@
+{
+  "name": "oha-test-deps",
+  "private": true,
+  "description": "Isolated dependency root for tests/. Keeps test-only packages out of the main package.json.",
+  "dependencies": {
+    "fengari": "^0.1.4"
+  }
+}

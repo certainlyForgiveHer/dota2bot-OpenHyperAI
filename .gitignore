@@ -66,3 +66,9 @@ dist
 
 # user's personal customized settings
 game/Customize
+
+# macOS
+.DS_Store
+
+# isolated dependency root for tests/
+tests/.deps/package-lock.json

@@ -29,11 +29,31 @@ local isChangePosMessageDone     = false
 
 if Utils.BuggyHeroesDueToValveTooLazy[botName] then local_mode_laning_generic = dofile( GetScriptDirectory().."/FunLib/override_generic/mode_laning_generic" ) end
 
+-- Lane aggression: when Customize.Lane_Aggression.Enable is true every hero uses the
+-- laning loop below, which adds hero trading and a forward hold position.
+-- When false this module never triggers and the gate behaves exactly as before.
+local LaneAggression = dofile( GetScriptDirectory()..'/FunLib/lane_aggression' )
+-- evaluated on demand so the switch can be flipped in Customize without a reload
+local function LaneAggressionOn()
+	return LaneAggression ~= nil and LaneAggression.Enabled()
+end
+local bLaneAggression = LaneAggressionOn()
+
+-- Read-only laning probe: samples lane state and records which branch decided GetDesire().
+-- Returns nDesire unchanged; does nothing unless Customize.Enable_Lane_Probe is true.
+local LaneProbe = dofile( GetScriptDirectory()..'/FunLib/lane_probe' )
+local function DesireFinish(nDesire, reason)
+	if LaneProbe ~= nil and LaneProbe.Enabled() then
+		LaneProbe.Note(nDesire, reason)
+	end
+	return nDesire
+end
+
 function GetDesire()
 	PickOneAnnouncer()
 	AnnounceMessages()
 
-	if bot:IsInvulnerable() or not bot:IsHero() or not bot:IsAlive() or not string.find(botName, "hero") or bot:IsIllusion() then return BOT_MODE_DESIRE_NONE end
+	if bot:IsInvulnerable() or not bot:IsHero() or not bot:IsAlive() or not string.find(botName, "hero") or bot:IsIllusion() then return DesireFinish(BOT_MODE_DESIRE_NONE, 'dead') end
 	local botLV = bot:GetLevel()
 	local currentTime = DotaTime()
 
@@ -57,7 +77,7 @@ function GetDesire()
 	end
 
 	if GetGameMode() == 23 then currentTime = currentTime * 1.65 end
-	if currentTime < 0 then return BOT_ACTION_DESIRE_NONE end
+	if currentTime < 0 then return DesireFinish(BOT_ACTION_DESIRE_NONE, 'pregame') end
 
 	-- if DotaTime() > 20 and DotaTime() - skipLaningState.lastCheckTime < skipLaningState.checkGap then
 	-- 	if skipLaningState.count > 6 then
@@ -70,7 +90,7 @@ function GetDesire()
 	-- end
 
 	if J.GetEnemiesAroundAncient(bot, 3200) > 0 then
-		return BOT_MODE_DESIRE_NONE
+		return DesireFinish(BOT_MODE_DESIRE_NONE, 'ancient')
 	end
 
 	-- if J.GetDistanceFromAncient( bot, true ) < 6900 then
@@ -82,46 +102,51 @@ function GetDesire()
 		local nLaneFrontLocation = GetLaneFrontLocation(GetTeam(), bot:GetAssignedLane(), 0)
 		local nDistFromLane = GetUnitToLocationDistance(bot, nLaneFrontLocation)
 		if not J.WeAreStronger(bot, 1200) or (nDistFromLane > 700 and J.GetHP(bot) < 0.7) then
-			return BOT_MODE_DESIRE_NONE
+			return DesireFinish(BOT_MODE_DESIRE_NONE, 'chased_off')
 		end
 	end
 
 	-- 如果在打高地 就别撤退去干别的
 	if J.Utils.IsTeamPushingSecondTierOrHighGround(bot) then
-		return BOT_MODE_DESIRE_NONE
+		return DesireFinish(BOT_MODE_DESIRE_NONE, 'team_pushing_highground')
 	end
 	-- if J.ShouldGoFarmDuringLaning(bot) then
 	-- 	return 0.2
 	-- end
 
-	if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) then
+	if local_mode_laning_generic or bLaneAggression or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) then
 		-- last hit
 		if J.IsInLaningPhase() then
 			local hitCreep, _ = GetBestLastHitCreep(nEnemyCreeps)
 			if J.IsValid(hitCreep) then
 				if J.GetPosition(bot) <= 2 or not J.IsThereNonSelfCoreNearby(700) -- this is for e.g lone druid bear as pos1-2 with core LD nearby to do last hit.
 				then
-					return 0.9
+					return DesireFinish(0.9, 'lasthit')
 				end
 			end
 		end
 	end
-	if local_mode_laning_generic and local_mode_laning_generic.GetDesire ~= nil then return local_mode_laning_generic.GetDesire() end
+	if local_mode_laning_generic and local_mode_laning_generic.GetDesire ~= nil then return DesireFinish(local_mode_laning_generic.GetDesire(), 'override') end
 
 	if GetGameMode() == GAMEMODE_1V1MID or GetGameMode() == GAMEMODE_MO then
-		return 1
+		return DesireFinish(1, '1v1mid')
 	end
 
-	if currentTime <= 10 then return 0.268 end
-	if currentTime <= 9 * 60 and botLV <= 7 then return 0.446 end
-	if currentTime <= 12 * 60 and botLV <= 11 then return 0.369 end
-	if botLV <= 14 and J.GetCoresAverageNetworth() < 7000 then return 0.2 end
+	if currentTime <= 10 then return DesireFinish(0.268, 'early')
+	end
+	if currentTime <= 9 * 60 and botLV <= 7 then return DesireFinish(0.446, 'lane_lv7')
+	end
+	if currentTime <= 12 * 60 and botLV <= 11 then return DesireFinish(0.369, 'lane_lv11')
+	end
+	if botLV <= 14 and J.GetCoresAverageNetworth() < 7000 then return DesireFinish(0.2, 'lane_networth')
+	end
 
 	J.Utils.GameStates.passiveLaningTime = true
-	return 0.01
+	return DesireFinish(0.01, 'passive')
 end
 
 function GetFurthestEnemyAttackRange(enemyList)
+	if enemyList == nil then return 0 end
 	local attackRange = 0
 	for _, enemy in pairs(enemyList) do
 		if J.IsValidHero(enemy) and not J.IsSuspiciousIllusion(enemy) then
@@ -136,6 +161,7 @@ function GetFurthestEnemyAttackRange(enemyList)
 end
 
 function GetBestLastHitCreep(hCreepList)
+	if hCreepList == nil then return nil end
 	local dmgDelta = attackDamage * 0.7
 
 	local moveToCreep = nil
@@ -158,6 +184,7 @@ function GetBestLastHitCreep(hCreepList)
 end
 
 function GetBestDenyCreep(hCreepList)
+	if hCreepList == nil then return nil end
 	for _, creep in pairs(hCreepList)
 	do
 		if J.IsValid(creep)
@@ -172,7 +199,7 @@ function GetBestDenyCreep(hCreepList)
 	return nil
 end
 
-if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) then
+if local_mode_laning_generic or bLaneAggression or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) then
 	function Think()
 		local hitCreep, moveToCreep = GetBestLastHitCreep(nEnemyCreeps)
 		if J.IsValid(hitCreep) then
@@ -201,6 +228,11 @@ if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) t
 			local_mode_laning_generic.Think()
 		end
 
+		-- Lane aggression: attack a nearby enemy hero when trading is allowed.
+		if LaneAggressionOn() and LaneAggression.ThinkTrade(nInRangeEnemy, nFurthestEnemyAttackRange) then
+			return
+		end
+
 		local fLaneFrontAmount = GetLaneFrontAmount(GetTeam(), botAssignedLane, false)
 		local fLaneFrontAmount_enemy = GetLaneFrontAmount(GetOpposingTeam(), botAssignedLane, false)
 
@@ -209,6 +241,19 @@ if local_mode_laning_generic or (J.GetPosition(bot) == 1 and J.IsPosxHuman(5)) t
 		local target_loc = GetLaneFrontLocation(GetTeam(), botAssignedLane, -nLongestAttackRange)
 		if fLaneFrontAmount_enemy < fLaneFrontAmount then
 			target_loc = GetLaneFrontLocation(GetOpposingTeam(), botAssignedLane, -nLongestAttackRange)
+		end
+
+		-- Lane aggression: hold forward while an enemy hero is nearby.
+		if LaneAggressionOn() then
+			local nOffset = LaneAggression.MovementOffset(-nLongestAttackRange, nInRangeEnemy)
+			if nOffset ~= -nLongestAttackRange then
+				local nLane = botAssignedLane
+				if fLaneFrontAmount_enemy < fLaneFrontAmount then
+					target_loc = GetLaneFrontLocation(GetOpposingTeam(), nLane, nOffset)
+				else
+					target_loc = GetLaneFrontLocation(GetTeam(), nLane, nOffset)
+				end
+			end
 		end
 
 		bot:Action_MoveToLocation(target_loc + RandomVector(50))

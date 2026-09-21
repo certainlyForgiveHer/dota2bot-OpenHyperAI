@@ -126,6 +126,47 @@ Customize.Fretbots = {
 -- This won't be very effective for FPS improvement because Valve has a lot of compute on their side that your PC have to handle for Local Hosting.
 Customize.ThinkLess = 1;
 
+-- Read-only laning probe: prints why bots play passively in lane (no behaviour change).
+-- Output lines are prefixed with "[LANE] " in the console log.
+-- Set to false (or nil) to turn the probe off completely.
+Customize.Enable_Lane_Probe = true;
+
+--[[ Lane aggression (laning-phase pressure and trading)
+     When Enable is true, ALL heroes get this repo's own laning loop instead of
+     Valve's default one, and the parameters below decide how hard they press.
+
+     Set Enable = false to restore the exact previous behaviour:
+       - the 9 heroes in BuggyHeroesDueToValveTooLazy keep their own laning script
+       - every other hero falls back to Valve's default laning behaviour
+]]
+Customize.Lane_Aggression = {
+    -- Master switch. false -> nothing below has any effect.
+    Enable = false,
+
+    -- true  : allow attacking enemies while an enemy tower can hit us
+    -- false : never attack a hero while enemy towers are in range (recommended first)
+    Tower_Dive = false,
+
+    -- true  : cores (pos 1-3) trade as well, not only supports (pos 4-5)
+    All_Roles_Trade = true,
+
+    -- How far towards the enemy the bot holds while an enemy hero is nearby.
+    -- Higher = further forward = more pressure, but also more tower and creep damage.
+    Forward_Distance = 120,
+
+    -- Extra attack range allowed when picking a target to hit.
+    Trade_Range_Bonus = 150,
+
+    -- Minimum HP fraction required to start a trade.
+    Min_Hp_To_Trade = 0.30,
+
+    -- Minimum mana fraction required, except for cores which may trade on cooldown.
+    Min_Mana_To_Trade = 0.20,
+
+    -- Re-evaluation interval of the trade decision, in seconds.
+    Trade_Refresh = 0.2,
+};
+
 return Customize
 
 
