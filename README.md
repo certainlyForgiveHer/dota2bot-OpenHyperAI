@@ -87,7 +87,7 @@ You can start a bot game directly from the console without network or clicking U
 
 ## Developer Documentation
 
-This project uses [Claude Code](https://claude.ai/claude-code) for AI-assisted development. The [CLAUDE.md](CLAUDE.md) file provides task-specific instructions for common operations like patch updates, hero fixes, and adding new heroes.
+The [AGENTS.md](AGENTS.md) file provides shared coding-agent instructions for common operations like patch updates, hero fixes, and adding new heroes. [CLAUDE.md](CLAUDE.md) points Claude Code to the same instructions.
 
 ### Key Docs
 
@@ -96,7 +96,7 @@ This project uses [Claude Code](https://claude.ai/claude-code) for AI-assisted d
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Complete codebase architecture, file map, naming conventions, all systems explained |
 | [docs/PATCH_UPDATE_GUIDE.md](docs/PATCH_UPDATE_GUIDE.md) | Step-by-step runbook for updating when a new Dota 2 patch drops |
 | [docs/BOT_API_REFERENCE.md](docs/BOT_API_REFERENCE.md) | Comprehensive Valve bot scripting API reference with examples |
-| [CLAUDE.md](CLAUDE.md) | AI coding assistant guide - common tasks, rules, and workflows |
+| [AGENTS.md](AGENTS.md) | AI coding assistant guide - common tasks, rules, and workflows |
 
 ### Internal Name References
 
