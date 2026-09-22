@@ -128,6 +128,9 @@ Customize.ThinkLess = 1;
 
 -- Read-only laning probe: prints why bots play passively in lane (no behaviour change).
 -- Output lines are prefixed with "[LANE] " in the console log.
+-- On by default so the first lane games produce analysable data. It prints roughly
+-- 10 lines per second for a 10-bot game and keeps a growing console.log, so turn it
+-- off for normal play once you have the logs you need.
 -- Set to false (or nil) to turn the probe off completely.
 Customize.Enable_Lane_Probe = true;
 
@@ -138,13 +141,22 @@ Customize.Enable_Lane_Probe = true;
      Set Enable = false to restore the exact previous behaviour:
        - the 9 heroes in BuggyHeroesDueToValveTooLazy keep their own laning script
        - every other hero falls back to Valve's default laning behaviour
+
+     STATUS: ON by default since 2026-09-21, at the user's request. The logic is
+     covered by offline tests in tests/lane_aggression/, but it has NOT been
+     validated in a real match. Two things to watch on the first games:
+       1. whether bots now trade noticeably more in lane (that is the intent)
+       2. whether lane deaths rise more than you are willing to accept
+     If something looks wrong, set Enable = false; that alone restores the old
+     behaviour with no other change needed.
 ]]
 Customize.Lane_Aggression = {
     -- Master switch. false -> nothing below has any effect.
-    Enable = false,
+    Enable = true,
 
     -- true  : allow attacking enemies while an enemy tower can hit us
     -- false : never attack a hero while enemy towers are in range (recommended first)
+    -- Kept false on purpose: tower diving is the highest-risk knob and is untested.
     Tower_Dive = false,
 
     -- true  : cores (pos 1-3) trade as well, not only supports (pos 4-5)

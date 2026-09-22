@@ -10,8 +10,10 @@
 | 开关 | 默认 | 作用 |
 |---|---|---|
 | `Customize.Enable_Lane_Probe` | `true` | 只读探针，打印 `[LANE]` 采样行。无行为影响 |
-| `Customize.Lane_Aggression.Enable` | `false` | 对线激进度总开关 |
+| `Customize.Lane_Aggression.Enable` | **`true`** | 对线激进度总开关 |
 | `Customize.Lane_Aggression.Tower_Dive` | `false` | 是否允许塔下压人（风险最高的一项） |
+
+**当前默认是开启的**（2026-09-21 按用户要求改为默认开）。这改变了仓库的开箱行为：不设任何配置直接开一局，全部英雄即使用本方案的对线逻辑。该逻辑有离线测试覆盖，但**尚未经真实对局验证**；若观感或死亡率不可接受，把 `Enable` 改回 `false` 即可完整恢复旧行为，不需要其它改动。
 
 `Lane_Aggression.Enable = false` 时行为与改动前完全一致：9 个 BuggyHero 继续用自己的对线脚本，其余英雄继续走 Valve 默认对线。
 
@@ -86,16 +88,20 @@
 
 ## 5. 回退
 
-1. **参数级回退**：`Customize.Lane_Aggression.Enable = false`。注意配置是**脚本加载时读取**的：改完需要在下一局开始前生效（重开 lobby），不是改文件后当前局立即变。这是最快的回退，行为回到基线。
+1. **参数级回退（首选）**：`Customize.Lane_Aggression.Enable = false`。注意配置是**脚本加载时读取**的：改完需要在下一局开始前生效（重开 lobby），不是改文件后当前局立即变。这是最快的回退，行为回到基线——因为默认已开，这一条现在是主要的"关掉它"手段。
 2. **单点降级**：只把 `Tower_Dive` 或 `All_Roles_Trade` 调回保守值，用于定位是哪一项导致的死亡上升。
 3. **代码级回退**：`lane_aggression.lua` 与本次 `mode_laning_generic.lua` 的改动是独立的一组变更，可单独 revert，不影响探针。
 
 ## 6. 建议的测试顺序
 
-1. `Enable_Lane_Probe = true`，`Lane_Aggression.Enable = false` → 跑一局，确认 G1 成立并留下基线数据。
-2. 只开 `Lane_Aggression.Enable = true`（`Tower_Dive = false`）→ 跑一局，对照 G4 指标。
+**注意：激进度现在默认开启**，所以下面第 2 步不再需要手动开，第 1 步的"纯基线局"反而需要手动把 `Enable` 临时改回 `false`。
+
+1. **基线局（需要手动关闭）**：`Enable_Lane_Probe = true`、`Lane_Aggression.Enable = false` → 跑一局，确认 G1 成立并留下基线数据。
+2. **激进度局（当前默认）**：`Lane_Aggression.Enable = true`、`Tower_Dive = false` → 跑一局，对照 G4 指标。
 3. 若死亡可接受再逐项放开：`All_Roles_Trade` → `Forward_Distance` → `Trade_Range_Bonus` → 最后才是 `Tower_Dive`。
 4. 每步只动一个变量。同时改多项会导致无法归因。
+
+由于默认已开，**第一次实际运行前建议先做第 1 步的基线局**，否则没有对照，无法判断"变凶"到底有没有发生、代价多大。若不想再跑基线局，就只能凭观感判断，G4 的量化对照将不可用。
 
 ## 7. 日志分析与离线验证
 
@@ -161,6 +167,12 @@ node tests/lane_aggression/run_lane_aggression.js .   # 激进度模块的 24 �
 - **Valve 默认对线的替代**：110+ 英雄从 Valve 的对线逻辑切到仓库自己的循环，属于行为替换而非微调。若出现补刀质量下降或走位异常，应视为本方案的主要风险，先回退开关再分析。
 - **`nEnemyCreeps` / `nAllyCreeps` 时序**：这两个本地缓存只在 `GetDesire()` 中刷新。已为三个使用点补 nil 防护；若真机出现空值报错，说明引擎在 `GetDesire` 之前调用了 `Think`。
 - **9 个 BuggyHero 双路径**：开关打开后它们的 `local_mode_laning_generic.Think()` 与激进度模块会先后执行，换血优先级高于它们的自有走位。这是有意为之，但需在真机确认没有互相抵消。
+- **每帧开销未测量**：开关打开后 `Think()` 对约 110 个原本没有该循环的英雄新增执行，且激进度路径每次调用会做一次 `GetNearbyTowers` 与目标有效性检查。无法离线测量帧时间影响；`docs/LLM_STRATEGY_IMPLEMENTATION_PLAN_ZH.md` §10.2 要求"测不到就报告未测"，此处即为未测。
+
+### 7.5 已知设计取舍（非缺陷，但会影响观感）
+
+1. **开启后 9 个 BuggyHero 失去其专属对线增强**。`override_generic/mode_laning_generic.lua` 提供的行为（吃树自愈、被英雄/塔/小兵打时的安全后撤、远离敌塔、塔仇恨脱离）在本方案接管对线循环后不再执行。我们选择的是"简单、可整体回退"，而不是把两套逻辑精细合并。受影响的英雄是 Muerta、Marci、Lone Druid Bear、Primal Beast、Dark Willow、Elder Titan、Hoodwink、IO、Kez。若对局中这些英雄频繁出现且观感变差，这是首要排查方向。
+2. **"脱战后撤"与"吃树"未纳入本方案**。基线的通用对线循环（`mode_laning_generic.Think`）本来就没有这两项，本方案只在其上增加换血与前压，没有新增逃生或续航行为。因此"更凶"意味着**风险确实上升**，而不是被某种新的自保机制抵消。
 
 ### 已修正的实现缺陷（供复查）
 
